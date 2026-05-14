@@ -44,3 +44,58 @@ pub fn get_dimension_split(d: usize) -> PdxDimensionSplit {
         vertical_d,
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn dimension_split_correct_for_various_dimensions() {
+        let dims: &[usize] = &[
+            1, 2, 4, 8, 16, 32, 48, 63, 64, 65, 127, 128, 129, 191, 192, 193, 255, 256, 257, 384,
+            512, 600, 768, 900, 1024, 1536, 2048, 3072, 4096,
+        ];
+        for &d in dims {
+            let split = get_dimension_split(d);
+            assert!(
+                split.horizontal_d % H_DIM_SIZE == 0 || split.horizontal_d == 0,
+                "horizontal_d={} not a multiple of {} (or 0) for d={d}",
+                split.horizontal_d,
+                H_DIM_SIZE
+            );
+            assert_eq!(
+                split.horizontal_d + split.vertical_d,
+                d,
+                "horizontal_d={} + vertical_d={} != d={d}",
+                split.horizontal_d,
+                split.vertical_d
+            );
+        }
+    }
+
+    #[test]
+    fn small_dimensions_horizontal_is_zero() {
+        for d in 1..=H_DIM_SIZE {
+            let split = get_dimension_split(d);
+            assert_eq!(
+                split.horizontal_d, 0,
+                "for d={d} <= H_DIM_SIZE, horizontal_d should be 0"
+            );
+            assert_eq!(
+                split.vertical_d, d,
+                "for d={d} <= H_DIM_SIZE, vertical_d should equal d"
+            );
+        }
+    }
+
+    #[test]
+    fn vertical_never_zero() {
+        for &d in &[64_usize, 128, 256, 512, 768, 1024, 2048, 4096] {
+            let split = get_dimension_split(d);
+            assert!(
+                split.vertical_d > 0,
+                "vertical_d should never be zero for d={d}"
+            );
+        }
+    }
+}

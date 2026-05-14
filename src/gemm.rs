@@ -4,14 +4,7 @@
 ///   `a`: m × k
 ///   `b`: k × n
 ///   `c`: m × n
-pub fn sgemm_row_major(
-    m: usize,
-    k: usize,
-    n: usize,
-    a: &[f32],
-    b: &[f32],
-    c: &mut [f32],
-) {
+pub fn sgemm_row_major(m: usize, k: usize, n: usize, a: &[f32], b: &[f32], c: &mut [f32]) {
     debug_assert!(a.len() >= m * k);
     debug_assert!(b.len() >= k * n);
     debug_assert!(c.len() >= m * n);

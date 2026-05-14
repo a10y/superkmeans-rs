@@ -175,34 +175,151 @@ fn random_orthonormal_matrix(d: usize, seed: u64) -> Vec<f32> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::utils::generate_random_vectors;
+
+    fn norm(v: &[f32]) -> f32 {
+        v.iter().map(|x| x * x).sum::<f32>().sqrt()
+    }
+
+    fn inner(a: &[f32], b: &[f32]) -> f32 {
+        a.iter().zip(b).map(|(x, y)| x * y).sum()
+    }
+
+    fn rotate_roundtrip_errors(d: usize, n: usize, seed: u64) -> (f64, f64) {
+        let pruner = ADSamplingPruner::new(d, 2.1, seed);
+        let original = generate_random_vectors(n, d, -1.0, 1.0, 42);
+        let mut rotated = vec![0.0_f32; n * d];
+        let mut recovered = vec![0.0_f32; n * d];
+        pruner.rotate(&original, &mut rotated, n);
+        pruner.unrotate(&rotated, &mut recovered, n);
+        let mut max_err = 0.0_f64;
+        let mut sum_err = 0.0_f64;
+        for i in 0..n * d {
+            let e = (original[i] - recovered[i]).abs() as f64;
+            if e > max_err {
+                max_err = e;
+            }
+            sum_err += e;
+        }
+        (max_err, sum_err / (n * d) as f64)
+    }
 
     #[test]
     fn rotation_matrix_is_orthonormal() {
         let d = 16;
         let pruner = ADSamplingPruner::new(d, 1.5, 42);
-        // Check Q Q^T = I by sampling
-        let mut acc = vec![0.0_f32; d * d];
         for r in 0..d {
             for c in 0..d {
                 let mut s = 0.0_f32;
                 for k in 0..d {
                     s += pruner.matrix[r * d + k] * pruner.matrix[c * d + k];
                 }
-                acc[r * d + c] = s;
-            }
-        }
-        for r in 0..d {
-            for c in 0..d {
                 let expected = if r == c { 1.0 } else { 0.0 };
                 assert!(
-                    (acc[r * d + c] - expected).abs() < 1.0e-4,
-                    "QQ^T[{}, {}] = {} (expected {})",
-                    r,
-                    c,
-                    acc[r * d + c],
-                    expected
+                    (s - expected).abs() < 1.0e-4,
+                    "QQ^T[{r}, {c}] = {s} (expected {expected})"
                 );
             }
+        }
+    }
+
+    #[test]
+    fn rotate_unrotate_inverse_low_dim() {
+        let (max_err, avg_err) = rotate_roundtrip_errors(128, 100, 7);
+        assert!(max_err < 1e-4, "max error {max_err} too large for d=128");
+        assert!(avg_err < 1e-5, "avg error {avg_err} too large for d=128");
+    }
+
+    #[test]
+    fn rotate_unrotate_inverse_multiple_dimensions() {
+        for &d in &[50_usize, 128, 256, 512] {
+            let (max_err, avg_err) = rotate_roundtrip_errors(d, 50, 7);
+            assert!(max_err < 1e-3, "max error {max_err} too large for d={d}");
+            assert!(avg_err < 1e-5, "avg error {avg_err} too large for d={d}");
+        }
+    }
+
+    #[test]
+    fn rotation_preserves_norms() {
+        for &d in &[64_usize, 128, 256] {
+            let n = 50;
+            let pruner = ADSamplingPruner::new(d, 2.1, 42);
+            let original = generate_random_vectors(n, d, -1.0, 1.0, 42);
+            let mut rotated = vec![0.0_f32; n * d];
+            pruner.rotate(&original, &mut rotated, n);
+            for i in 0..n {
+                let on = norm(&original[i * d..(i + 1) * d]);
+                let rn = norm(&rotated[i * d..(i + 1) * d]);
+                let rel = (on - rn).abs() / on;
+                assert!(
+                    rel < 1e-4,
+                    "norm not preserved for vector {i} at d={d} (orig={on}, rot={rn}, rel={rel})"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn rotation_preserves_inner_products() {
+        for &d in &[64_usize, 128, 256] {
+            let n = 20;
+            let pruner = ADSamplingPruner::new(d, 2.1, 42);
+            let vectors = generate_random_vectors(n, d, -1.0, 1.0, 42);
+            let mut rotated = vec![0.0_f32; n * d];
+            pruner.rotate(&vectors, &mut rotated, n);
+            for i in 0..n {
+                for j in i + 1..n {
+                    let vi = &vectors[i * d..(i + 1) * d];
+                    let vj = &vectors[j * d..(j + 1) * d];
+                    let ri = &rotated[i * d..(i + 1) * d];
+                    let rj = &rotated[j * d..(j + 1) * d];
+                    let orig = inner(vi, vj);
+                    let rot = inner(ri, rj);
+                    let abs_err = (orig - rot).abs();
+                    let rel_err = abs_err / orig.abs().max(1.0);
+                    assert!(
+                        abs_err < 1e-3 || rel_err < 1e-3,
+                        "inner product not preserved for ({i}, {j}) at d={d}: orig={orig}, rot={rot}"
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn rotation_preserves_distances() {
+        for &d in &[128_usize, 256] {
+            let n = 20;
+            let pruner = ADSamplingPruner::new(d, 2.1, 42);
+            let vectors = generate_random_vectors(n, d, -1.0, 1.0, 42);
+            let mut rotated = vec![0.0_f32; n * d];
+            pruner.rotate(&vectors, &mut rotated, n);
+            for i in 0..n {
+                for j in i + 1..n {
+                    let vi = &vectors[i * d..(i + 1) * d];
+                    let vj = &vectors[j * d..(j + 1) * d];
+                    let ri = &rotated[i * d..(i + 1) * d];
+                    let rj = &rotated[j * d..(j + 1) * d];
+                    let orig_d2: f32 = vi.iter().zip(vj).map(|(a, b)| (a - b) * (a - b)).sum();
+                    let rot_d2: f32 = ri.iter().zip(rj).map(|(a, b)| (a - b) * (a - b)).sum();
+                    let rel = (orig_d2 - rot_d2).abs() / orig_d2;
+                    assert!(
+                        rel < 1e-4,
+                        "distance not preserved for ({i}, {j}) at d={d}: orig={orig_d2}, rot={rot_d2}"
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn single_vector_roundtrip() {
+        for &d in &[64_usize, 256] {
+            let (max_err, _) = rotate_roundtrip_errors(d, 1, 13);
+            assert!(
+                max_err < 1e-4,
+                "single vector roundtrip failed at d={d}: max_err={max_err}"
+            );
         }
     }
 
@@ -221,10 +338,46 @@ mod tests {
         for i in 0..n * d {
             assert!(
                 (input[i] - restored[i]).abs() < 1.0e-3,
-                "mismatch at {}: {} vs {}",
-                i,
+                "mismatch at {i}: {} vs {}",
                 input[i],
                 restored[i]
+            );
+        }
+    }
+
+    #[test]
+    fn different_seeds_produce_different_rotations() {
+        let d = 128;
+        let n = 5;
+        let original = generate_random_vectors(n, d, -1.0, 1.0, 42);
+        let p1 = ADSamplingPruner::new(d, 2.1, 42);
+        let p2 = ADSamplingPruner::new(d, 2.1, 123);
+        let mut r1 = vec![0.0_f32; n * d];
+        let mut r2 = vec![0.0_f32; n * d];
+        p1.rotate(&original, &mut r1, n);
+        p2.rotate(&original, &mut r2, n);
+        let any_diff = r1.iter().zip(&r2).any(|(a, b)| (a - b).abs() > 1e-6);
+        assert!(
+            any_diff,
+            "different seeds should produce different rotations"
+        );
+    }
+
+    #[test]
+    fn same_seed_produces_identical_rotations() {
+        let d = 128;
+        let n = 5;
+        let original = generate_random_vectors(n, d, -1.0, 1.0, 42);
+        let p1 = ADSamplingPruner::new(d, 2.1, 42);
+        let p2 = ADSamplingPruner::new(d, 2.1, 42);
+        let mut r1 = vec![0.0_f32; n * d];
+        let mut r2 = vec![0.0_f32; n * d];
+        p1.rotate(&original, &mut r1, n);
+        p2.rotate(&original, &mut r2, n);
+        for i in 0..n * d {
+            assert_eq!(
+                r1[i], r2[i],
+                "same seed should produce bit-identical rotations at {i}"
             );
         }
     }

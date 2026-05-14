@@ -110,11 +110,7 @@ pub fn generate_random_vectors(
 }
 
 pub fn ceil_to_multiple(x: u32, m: u32) -> u32 {
-    if m == 0 {
-        x
-    } else {
-        ((x + m - 1) / m) * m
-    }
+    if m == 0 { x } else { ((x + m - 1) / m) * m }
 }
 
 pub fn is_power_of_two(x: u32) -> bool {
@@ -134,13 +130,15 @@ pub fn compute_l2_squared(a: &[f32], b: &[f32]) -> f32 {
 
 pub fn compute_norms_row_major(data: &[f32], n: usize, d: usize) -> Vec<f32> {
     let mut out = vec![0.0_f32; n];
-    data.par_chunks(d).zip(out.par_iter_mut()).for_each(|(row, n_out)| {
-        let mut s = 0.0_f32;
-        for &v in row {
-            s += v * v;
-        }
-        *n_out = s;
-    });
+    data.par_chunks(d)
+        .zip(out.par_iter_mut())
+        .for_each(|(row, n_out)| {
+            let mut s = 0.0_f32;
+            for &v in row {
+                s += v * v;
+            }
+            *n_out = s;
+        });
     out
 }
 

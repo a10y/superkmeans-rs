@@ -191,9 +191,8 @@ pub fn find_k_nearest_neighbors(
                         candidates.push((row[c], (j_base + c) as u32));
                     }
                     let actual_k = k.min(candidates.len());
-                    candidates.sort_by(|a, b| {
-                        a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal)
-                    });
+                    candidates
+                        .sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal));
                     for ki in 0..actual_k {
                         dist_row[ki] = candidates[ki].0.max(0.0);
                         knn_row[ki] = candidates[ki].1;

@@ -285,8 +285,12 @@ impl SuperKMeans {
         for iter_idx in 0..self.config.iters {
             let use_gemm_only = (iter_idx == 0) || always_gemm_only;
             if !use_gemm_only && !partial_norms_computed {
-                self.data_norms =
-                    compute_partial_norms_row_major(&data_to_cluster, n_samples, d, self.partial_d as usize);
+                self.data_norms = compute_partial_norms_row_major(
+                    &data_to_cluster,
+                    n_samples,
+                    d,
+                    self.partial_d as usize,
+                );
                 partial_norms_computed = true;
             }
             self.run_iteration(
@@ -298,7 +302,12 @@ impl SuperKMeans {
             );
 
             if self.config.early_termination
-                && self.should_stop_early(false, &mut best_recall, &mut iters_without_improvement, iter_idx)
+                && self.should_stop_early(
+                    false,
+                    &mut best_recall,
+                    &mut iters_without_improvement,
+                    iter_idx,
+                )
             {
                 break;
             }
@@ -338,7 +347,10 @@ impl SuperKMeans {
         centroids: &[f32],
         n_vectors: usize,
     ) -> Vec<u32> {
-        assert!(self.trained, "assign_training_points requires training first");
+        assert!(
+            self.trained,
+            "assign_training_points requires training first"
+        );
         let d = self.d;
         let n_centroids = centroids.len() / d;
 
@@ -378,7 +390,8 @@ impl SuperKMeans {
                 compute_partial_norms_row_major(data_p, n_vectors, d, self.partial_d as usize);
             // Seed assignments from training run; for sampling_fraction=1, training assignments
             // match the natural indices.
-            result_assignments.copy_from_slice(&self.assignments[..n_vectors.min(self.assignments.len())]);
+            result_assignments
+                .copy_from_slice(&self.assignments[..n_vectors.min(self.assignments.len())]);
             batch::find_nearest_neighbor_with_pruning(
                 data_p,
                 centroids,
@@ -409,7 +422,12 @@ impl SuperKMeans {
                     result_assignments[orig] = self.assignments[cur];
                 }
             }
-            let weights: Vec<u32> = self.cluster_sizes.iter().copied().map(|s| s.max(1)).collect();
+            let weights: Vec<u32> = self
+                .cluster_sizes
+                .iter()
+                .copied()
+                .map(|s| s.max(1))
+                .collect();
             let weighted = WeightedIndex::new(&weights).expect("non-empty weights");
             for cur in n_samples..n_vectors {
                 let orig = if cur < self.sampled_indices.len() {
@@ -577,12 +595,8 @@ impl SuperKMeans {
             let (avg, changed) = self.tune_partial_d(not_pruned_counts, n_samples, n_clusters);
             avg_not_pruned_pct = avg;
             if changed {
-                self.data_norms = compute_partial_norms_row_major(
-                    data,
-                    n_samples,
-                    d,
-                    self.partial_d as usize,
-                );
+                self.data_norms =
+                    compute_partial_norms_row_major(data, n_samples, d, self.partial_d as usize);
             }
         }
 
@@ -814,16 +828,22 @@ impl SuperKMeans {
         n_samples: usize,
         n_y: usize,
     ) -> (f32, bool) {
-        let sum: f64 = not_pruned_counts.iter().take(n_samples).map(|&v| v as f64).sum();
+        let sum: f64 = not_pruned_counts
+            .iter()
+            .take(n_samples)
+            .map(|&v| v as f64)
+            .sum();
         let avg = (sum / (n_samples as f64 * n_y as f64)) as f32;
         let old_partial_d = self.partial_d;
         if avg > self.config.max_not_pruned_pct {
-            let increase = ((self.partial_d as f32) * self.config.adjustment_factor_for_partial_d * 2.0) as u32;
+            let increase = ((self.partial_d as f32)
+                * self.config.adjustment_factor_for_partial_d
+                * 2.0) as u32;
             self.partial_d = (self.partial_d + increase.max(1)).min(self.vertical_d as u32);
         } else if avg < self.config.min_not_pruned_pct {
-            let decrease = ((self.partial_d as f32) * self.config.adjustment_factor_for_partial_d) as u32;
-            self.partial_d =
-                (self.partial_d.saturating_sub(decrease.max(1))).max(MIN_PARTIAL_D);
+            let decrease =
+                ((self.partial_d as f32) * self.config.adjustment_factor_for_partial_d) as u32;
+            self.partial_d = (self.partial_d.saturating_sub(decrease.max(1))).max(MIN_PARTIAL_D);
         }
         (avg, old_partial_d != self.partial_d)
     }
@@ -903,7 +923,8 @@ impl SuperKMeans {
 
         if rotate {
             let mut rotated = vec![0.0_f32; n_clusters * d];
-            self.pruner.rotate(&self.horizontal_centroids, &mut rotated, n_clusters);
+            self.pruner
+                .rotate(&self.horizontal_centroids, &mut rotated, n_clusters);
             self.horizontal_centroids[..n_clusters * d].copy_from_slice(&rotated);
         }
     }
@@ -928,13 +949,10 @@ impl SuperKMeans {
                 self.sampled_indices.swap(i, j);
             }
             let mut samples = vec![0.0_f32; n_samples * d];
-            samples
-                .par_chunks_mut(d)
-                .enumerate()
-                .for_each(|(i, dst)| {
-                    let src = self.sampled_indices[i] * d;
-                    dst.copy_from_slice(&data[src..src + d]);
-                });
+            samples.par_chunks_mut(d).enumerate().for_each(|(i, dst)| {
+                let src = self.sampled_indices[i] * d;
+                dst.copy_from_slice(&data[src..src + d]);
+            });
             if rotate {
                 let mut rotated = vec![0.0_f32; n_samples * d];
                 self.pruner.rotate(&samples, &mut rotated, n_samples);
@@ -950,7 +968,8 @@ impl SuperKMeans {
             }
             if rotate {
                 let mut rotated = vec![0.0_f32; n_samples * d];
-                self.pruner.rotate(&data[..n_samples * d], &mut rotated, n_samples);
+                self.pruner
+                    .rotate(&data[..n_samples * d], &mut rotated, n_samples);
                 rotated
             } else {
                 data[..n_samples * d].to_vec()
@@ -978,7 +997,8 @@ impl SuperKMeans {
         let n_clusters = self.n_clusters;
         if unrotate {
             let mut out = vec![0.0_f32; n_clusters * d];
-            self.pruner.unrotate(&self.horizontal_centroids, &mut out, n_clusters);
+            self.pruner
+                .unrotate(&self.horizontal_centroids, &mut out, n_clusters);
             out
         } else {
             self.horizontal_centroids[..n_clusters * d].to_vec()
@@ -1010,7 +1030,9 @@ impl SuperKMeans {
             0.0
         };
         let sq_sum: usize = sizes.iter().map(|&s| s * s).sum();
-        let stdev = (sq_sum as f32 / sizes.len() as f32 - mean * mean).max(0.0).sqrt();
+        let stdev = (sq_sum as f32 / sizes.len() as f32 - mean * mean)
+            .max(0.0)
+            .sqrt();
         let cv = if mean != 0.0 { stdev / mean } else { 0.0 };
         let min = *sizes.iter().min().unwrap_or(&0);
         let max = *sizes.iter().max().unwrap_or(&0);
@@ -1025,12 +1047,7 @@ impl SuperKMeans {
     }
 }
 
-pub(crate) fn compute_norms_row_major(
-    data: &[f32],
-    n: usize,
-    d: usize,
-    _full: bool,
-) -> Vec<f32> {
+pub(crate) fn compute_norms_row_major(data: &[f32], n: usize, d: usize, _full: bool) -> Vec<f32> {
     let mut out = vec![0.0_f32; n];
     out.par_iter_mut().enumerate().for_each(|(i, dst)| {
         let row = &data[i * d..(i + 1) * d];

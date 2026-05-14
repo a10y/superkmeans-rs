@@ -18,8 +18,8 @@ use crate::common::{H_DIM_SIZE, KnnCandidate};
 /// Returns `(best_candidate, initial_not_pruned)`.
 pub fn top1_partial_search(
     pruner: &ADSamplingPruner,
-    query: &[f32],            // length d (already rotated)
-    centroids: &[f32],        // batch_n_y × d, row-major
+    query: &[f32],     // length d (already rotated)
+    centroids: &[f32], // batch_n_y × d, row-major
     batch_n_y: usize,
     d: usize,
     vertical_d: usize,

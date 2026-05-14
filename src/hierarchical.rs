@@ -52,7 +52,11 @@ pub struct HierarchicalSuperKMeans {
 
 impl HierarchicalSuperKMeans {
     pub fn new(n_clusters: usize, dimensionality: usize) -> Self {
-        Self::with_config(n_clusters, dimensionality, HierarchicalSuperKMeansConfig::default())
+        Self::with_config(
+            n_clusters,
+            dimensionality,
+            HierarchicalSuperKMeansConfig::default(),
+        )
     }
 
     pub fn with_config(
@@ -60,8 +64,14 @@ impl HierarchicalSuperKMeans {
         dimensionality: usize,
         config: HierarchicalSuperKMeansConfig,
     ) -> Self {
-        assert!(config.iters_mesoclustering > 0, "iters_mesoclustering must be positive");
-        assert!(config.iters_fineclustering > 0, "iters_fineclustering must be positive");
+        assert!(
+            config.iters_mesoclustering > 0,
+            "iters_mesoclustering must be positive"
+        );
+        assert!(
+            config.iters_fineclustering > 0,
+            "iters_fineclustering must be positive"
+        );
 
         let mut base_config = config.base.clone();
         base_config.use_aggressive_split = true;
@@ -156,12 +166,8 @@ impl HierarchicalSuperKMeans {
 
         self.base.data_norms =
             compute_norms_row_major(&data_to_cluster, self.base.n_samples, d, true);
-        self.base.centroid_norms = compute_norms_row_major(
-            &self.base.prev_centroids,
-            self.n_mesoclusters,
-            d,
-            true,
-        );
+        self.base.centroid_norms =
+            compute_norms_row_major(&self.base.prev_centroids, self.n_mesoclusters, d, true);
 
         let immutable_data_norms = self.base.data_norms.clone();
 
@@ -211,8 +217,7 @@ impl HierarchicalSuperKMeans {
         self.base.n_clusters = n_clusters;
 
         // Snapshot mesocluster state.
-        let mesocluster_sizes: Vec<u32> =
-            self.base.cluster_sizes[..self.n_mesoclusters].to_vec();
+        let mesocluster_sizes: Vec<u32> = self.base.cluster_sizes[..self.n_mesoclusters].to_vec();
         let mesocluster_assignments: Vec<u32> =
             self.base.assignments[..self.base.n_samples].to_vec();
 
@@ -272,7 +277,11 @@ impl HierarchicalSuperKMeans {
 
             // Seed centroids by sampling fine ones from this mesocluster.
             self.base.n_clusters = n_fine;
-            self.base.generate_centroids(&mesocluster_buffer[..mesocluster_size * d], mesocluster_size, false);
+            self.base.generate_centroids(
+                &mesocluster_buffer[..mesocluster_size * d],
+                mesocluster_size,
+                false,
+            );
             self.base.n_clusters = n_clusters;
             self.base.prev_centroids[..n_fine * d]
                 .copy_from_slice(&self.base.horizontal_centroids[..n_fine * d]);
@@ -346,14 +355,17 @@ impl HierarchicalSuperKMeans {
         self.base.partial_d = (MIN_PARTIAL_D).max((self.base.vertical_d as u32) / 3);
 
         // Move final_centroids into horizontal_centroids/prev_centroids.
-        self.base.horizontal_centroids[..n_clusters * d].copy_from_slice(&final_centroids[..n_clusters * d]);
-        self.base.prev_centroids[..n_clusters * d].copy_from_slice(&final_centroids[..n_clusters * d]);
+        self.base.horizontal_centroids[..n_clusters * d]
+            .copy_from_slice(&final_centroids[..n_clusters * d]);
+        self.base.prev_centroids[..n_clusters * d]
+            .copy_from_slice(&final_centroids[..n_clusters * d]);
         self.base.assignments[..self.base.n_samples]
             .copy_from_slice(&final_assignments[..self.base.n_samples]);
-        self.base.centroid_norms = compute_norms_row_major(&self.base.prev_centroids, n_clusters, d, true);
+        self.base.centroid_norms =
+            compute_norms_row_major(&self.base.prev_centroids, n_clusters, d, true);
 
-        let refinement_always_gemm_only = d < DIMENSION_THRESHOLD_FOR_PRUNING
-            || n_clusters <= N_CLUSTERS_THRESHOLD_FOR_PRUNING;
+        let refinement_always_gemm_only =
+            d < DIMENSION_THRESHOLD_FOR_PRUNING || n_clusters <= N_CLUSTERS_THRESHOLD_FOR_PRUNING;
         let mut refinement_partial_norms_computed = false;
         for refinement_iter_idx in 0..self.config.iters_refinement {
             if !refinement_always_gemm_only && !refinement_partial_norms_computed {
@@ -378,7 +390,8 @@ impl HierarchicalSuperKMeans {
         }
 
         self.base.trained = true;
-        self.base.get_output_centroids(self.base.config.unrotate_centroids)
+        self.base
+            .get_output_centroids(self.base.config.unrotate_centroids)
     }
 
     pub fn assign(&self, vectors: &[f32], centroids: &[f32], n_vectors: usize) -> Vec<u32> {
@@ -402,8 +415,7 @@ impl HierarchicalSuperKMeans {
     ) -> Vec<usize> {
         let mut out = vec![0_usize; n_mesoclusters];
         let mut n_clusters_remaining = n_clusters;
-        let mut n_nonempty_remaining =
-            mesocluster_sizes.iter().filter(|&&s| s > 0).count();
+        let mut n_nonempty_remaining = mesocluster_sizes.iter().filter(|&&s| s > 0).count();
         let mut n_samples_remaining = n_samples;
         for i in 0..n_mesoclusters {
             if i < n_mesoclusters - 1 {
@@ -415,8 +427,7 @@ impl HierarchicalSuperKMeans {
                         / n_samples_remaining as f64;
                     let mut allocated = proportion.round() as usize;
                     if n_clusters_remaining >= n_nonempty_remaining {
-                        allocated =
-                            allocated.min(n_clusters_remaining - n_nonempty_remaining);
+                        allocated = allocated.min(n_clusters_remaining - n_nonempty_remaining);
                     }
                     out[i] = allocated.max(1);
                 }
